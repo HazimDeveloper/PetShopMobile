@@ -73,7 +73,7 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
     }
   }
 
-  // Replace the _saveFunFact method in addfunfactpage.dart
+ // Replace the _saveFunFact method in addfunfactpage.dart with this corrected version
 
 Future<bool> _saveFunFact(FunFact fact, {int? index}) async {
   try {
@@ -98,7 +98,6 @@ Future<bool> _saveFunFact(FunFact fact, {int? index}) async {
       print('Create response body: "${response.body}"');
 
       if (response.statusCode == 200) {
-        // Check if response body is empty
         if (response.body.trim().isEmpty) {
           print('Empty response body received');
           return false;
@@ -119,26 +118,30 @@ Future<bool> _saveFunFact(FunFact fact, {int? index}) async {
         }
       }
     } else {
-      // EDIT EXISTING FUN FACT
+      // EDIT EXISTING FUN FACT - Send as POST with action=update
       var request = http.MultipartRequest(
         'POST',
-        url.replace(queryParameters: {
-          'action': 'update',
-          'id': fact.id.toString(),
-        }),
+        url.replace(queryParameters: {'action': 'update'}),
       );
       
-      // Add form fields
+      // Add form fields - IMPORTANT: Add the ID field
+      request.fields['id'] = fact.id.toString();
       request.fields['icon'] = fact.icon;
       request.fields['title'] = fact.title;
       request.fields['description'] = fact.description;
-      request.fields['id'] = fact.id.toString();
+
+      print('Update request fields: ${request.fields}');
 
       // Handle image if changed
       if (fact.imagePath != null && 
           fact.imagePath!.isNotEmpty && 
           File(fact.imagePath!).existsSync()) {
-        request.files.add(await http.MultipartFile.fromPath('image', fact.imagePath!));
+        
+        // Check if this is a new image (local file path) vs existing image (server path)
+        if (!fact.imagePath!.startsWith('uploads/') && !fact.imagePath!.startsWith('http')) {
+          print('Adding new image file: ${fact.imagePath}');
+          request.files.add(await http.MultipartFile.fromPath('image', fact.imagePath!));
+        }
       }
 
       final streamedResponse = await request.send();
@@ -146,10 +149,8 @@ Future<bool> _saveFunFact(FunFact fact, {int? index}) async {
 
       print('Update response status: ${response.statusCode}');
       print('Update response body: "${response.body}"');
-      print('Update response headers: ${response.headers}');
 
       if (response.statusCode == 200) {
-        // Check if response body is empty
         if (response.body.trim().isEmpty) {
           print('Empty response body received - this indicates a PHP error');
           return false;
