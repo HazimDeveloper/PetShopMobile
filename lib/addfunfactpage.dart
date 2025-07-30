@@ -64,76 +64,120 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
           }
         });
       } else {
-        print('Failed to load fun facts');
+        print('Failed to load fun facts: ${response.statusCode}');
+        _showErrorSnackBar('Failed to load fun facts');
       }
     } catch (e) {
       print('Error fetching fun facts: $e');
+      _showErrorSnackBar('Error fetching fun facts: $e');
     }
   }
 
-  Future<bool> _saveFunFact(FunFact fact, {int? index}) async {
-    try {
-      if (index == null) {
-        var request = http.MultipartRequest(
-          'POST',
-          url.replace(queryParameters: {'action': 'create'}),
-        );
-        request.fields['icon'] = fact.icon;
-        request.fields['title'] = fact.title;
-        request.fields['description'] = fact.description;
+  // Replace the _saveFunFact method in addfunfactpage.dart
 
-        if (fact.imagePath != null && fact.imagePath!.isNotEmpty && File(fact.imagePath!).existsSync()) {
-          request.files.add(await http.MultipartFile.fromPath('image', fact.imagePath!));
+Future<bool> _saveFunFact(FunFact fact, {int? index}) async {
+  try {
+    if (index == null) {
+      // CREATE NEW FUN FACT
+      var request = http.MultipartRequest(
+        'POST',
+        url.replace(queryParameters: {'action': 'create'}),
+      );
+      request.fields['icon'] = fact.icon;
+      request.fields['title'] = fact.title;
+      request.fields['description'] = fact.description;
+
+      if (fact.imagePath != null && fact.imagePath!.isNotEmpty && File(fact.imagePath!).existsSync()) {
+        request.files.add(await http.MultipartFile.fromPath('image', fact.imagePath!));
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print('Create response status: ${response.statusCode}');
+      print('Create response body: "${response.body}"');
+
+      if (response.statusCode == 200) {
+        // Check if response body is empty
+        if (response.body.trim().isEmpty) {
+          print('Empty response body received');
+          return false;
         }
-
-        final streamedResponse = await request.send();
-        final response = await http.Response.fromStream(streamedResponse);
-
-        if (response.statusCode == 200) {
+        
+        try {
           var resBody = json.decode(response.body);
           if (resBody['success'] == true) {
             await _fetchFunFacts();
             return true;
+          } else {
+            print('Server returned error: ${resBody['message'] ?? 'Unknown error'}');
           }
-        }
-      } else {
-        String? base64Image;
-        if (fact.imagePath != null &&
-            fact.imagePath!.isNotEmpty &&
-            File(fact.imagePath!).existsSync()) {
-          final bytes = await File(fact.imagePath!).readAsBytes();
-          base64Image = 'data:image/${fact.imagePath!.split('.').last};base64,${base64Encode(bytes)}';
-        }
-
-        final body = json.encode({
-          'icon': fact.icon,
-          'title': fact.title,
-          'description': fact.description,
-          'imageBase64': base64Image ?? '', 
-        });
-
-        final response = await http.put(
-          url.replace(queryParameters: {
-            'action': 'update',
-            'id': fact.id.toString(),
-          }),
-          headers: {'Content-Type': 'application/json'},
-          body: body,
-        );
-
-        if (response.statusCode == 200) {
-          var resBody = json.decode(response.body);
-          if (resBody['success'] == true) {
-            await _fetchFunFacts();
-            return true;
-          }
+        } catch (e) {
+          print('JSON decode error: $e');
+          print('Response body was: "${response.body}"');
+          return false;
         }
       }
-    } catch (e) {
-      print('Error saving fun fact: $e');
+    } else {
+      // EDIT EXISTING FUN FACT
+      var request = http.MultipartRequest(
+        'POST',
+        url.replace(queryParameters: {
+          'action': 'update',
+          'id': fact.id.toString(),
+        }),
+      );
+      
+      // Add form fields
+      request.fields['icon'] = fact.icon;
+      request.fields['title'] = fact.title;
+      request.fields['description'] = fact.description;
+      request.fields['id'] = fact.id.toString();
+
+      // Handle image if changed
+      if (fact.imagePath != null && 
+          fact.imagePath!.isNotEmpty && 
+          File(fact.imagePath!).existsSync()) {
+        request.files.add(await http.MultipartFile.fromPath('image', fact.imagePath!));
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print('Update response status: ${response.statusCode}');
+      print('Update response body: "${response.body}"');
+      print('Update response headers: ${response.headers}');
+
+      if (response.statusCode == 200) {
+        // Check if response body is empty
+        if (response.body.trim().isEmpty) {
+          print('Empty response body received - this indicates a PHP error');
+          return false;
+        }
+        
+        try {
+          var resBody = json.decode(response.body);
+          if (resBody['success'] == true) {
+            await _fetchFunFacts();
+            return true;
+          } else {
+            print('Server returned error: ${resBody['message'] ?? 'Unknown error'}');
+          }
+        } catch (e) {
+          print('JSON decode error: $e');
+          print('Response body was: "${response.body}"');
+          return false;
+        }
+      } else {
+        print('HTTP error: ${response.statusCode}');
+        return false;
+      }
     }
-    return false;
+  } catch (e) {
+    print('Error saving fun fact: $e');
   }
+  return false;
+}
 
   Future<bool> _deleteFunFactBackend(int id) async {
     try {
@@ -143,6 +187,8 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
         if (resBody['success'] == true) {
           await _fetchFunFacts();
           return true;
+        } else {
+          print('Delete failed: ${resBody['message'] ?? 'Unknown error'}');
         }
       }
     } catch (e) {
@@ -158,15 +204,52 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
         fact: existingFact,
         index: index,
         onSave: (newFact) async {
-          bool success = await _saveFunFact(
-            existingFact == null ? newFact : newFact.copyWith(id: existingFact.id),
-            index: index,
+          // Show loading indicator
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => Center(
+              child: CircularProgressIndicator(
+                color: buttonColor,
+              ),
+            ),
           );
-          if (success) {
+
+          try {
+            bool success = await _saveFunFact(
+              existingFact == null ? newFact : newFact.copyWith(id: existingFact.id),
+              index: index,
+            );
+            
+            // Close loading indicator
             Navigator.pop(context);
-          } else {
+            
+            if (success) {
+              Navigator.pop(context); // Close the modal
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(existingFact == null ? 'Fun fact added successfully!' : 'Fun fact updated successfully!'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Failed to ${existingFact == null ? 'add' : 'update'} fun fact. Please try again.'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          } catch (e) {
+            // Close loading indicator
+            Navigator.pop(context);
+            
+            print('Error in onSave: $e');
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Failed to save fun fact')),
+              SnackBar(
+                content: Text('Error: $e'),
+                backgroundColor: Colors.red,
+              ),
             );
           }
         },
@@ -179,14 +262,69 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
 
   void _deleteFunFact(int index) async {
     final funFactToDelete = _funFacts[index];
+    
     if (funFactToDelete.id != 0) {
-      bool success = await _deleteFunFactBackend(funFactToDelete.id);
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete fun fact')),
+      // Show confirmation dialog
+      bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Delete Fun Fact'),
+          content: Text('Are you sure you want to delete "${funFactToDelete.title}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: Text('Delete'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => Center(
+            child: CircularProgressIndicator(color: buttonColor),
+          ),
         );
+
+        bool success = await _deleteFunFactBackend(funFactToDelete.id);
+        
+        // Close loading indicator
+        Navigator.pop(context);
+        
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Fun fact deleted successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to delete fun fact'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
   @override
@@ -195,6 +333,12 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
       appBar: AppBar(
         title: const Text('Manage Fun Facts'),
         backgroundColor: buttonColor,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _fetchFunFacts,
+          ),
+        ],
       ),
       backgroundColor: cardColor,
       body: Column(
@@ -223,33 +367,73 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              fact.imagePath != null && fact.imagePath!.isNotEmpty
-                                  ? ClipRRect(
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                                      child: Image.network(
-                                        'http://10.0.2.2/project1msyamar/${fact.imagePath}',
+                              if (fact.imagePath != null && fact.imagePath!.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                                  child: Image.network(
+                                    'http://10.0.2.2/project1msyamar/${fact.imagePath}',
+                                    height: 150,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
                                         height: 150,
                                         width: double.infinity,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  : const SizedBox(height: 150),
+                                        color: Colors.grey[300],
+                                        child: Icon(Icons.error, size: 50),
+                                      );
+                                    },
+                                  ),
+                                )
+                              else
+                                Container(
+                                  height: 150,
+                                  width: double.infinity,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[300],
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                                  ),
+                                  child: Icon(Icons.image_not_supported, size: 50),
+                                ),
                               Padding(
                                 padding: const EdgeInsets.all(16.0),
                                 child: ListTile(
-                                  title: Text(
-                                    fact.title,
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: textColor,
+                                  title: Row(
+                                    children: [
+                                      Container(
+                                        width: 40,
+                                        height: 40,
+                                        decoration: BoxDecoration(
+                                          color: highlightColor.withOpacity(0.3),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          fact.icon,
+                                          style: TextStyle(fontSize: 24),
+                                        ),
+                                      ),
+                                      SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          fact.title,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: Text(
+                                      fact.description,
+                                      style: TextStyle(color: textColor.withOpacity(0.8)),
                                     ),
                                   ),
-                                  subtitle: Text(
-                                    fact.description,
-                                    style: TextStyle(color: textColor.withOpacity(0.8)),
-                                  ),
-                                  trailing: PopupMenuButton<String>( // For edit and delete options
+                                  trailing: PopupMenuButton<String>(
                                     onSelected: (value) {
                                       if (value == 'Edit') {
                                         _navigateToNewFunFactPage(existingFact: fact, index: index);
@@ -260,11 +444,23 @@ class _AddFunFactPageState extends State<AddFunFactPage> {
                                     itemBuilder: (context) => [
                                       PopupMenuItem(
                                         value: 'Edit',
-                                        child: Text('Edit', style: TextStyle(color: textColor)),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit, color: textColor),
+                                            SizedBox(width: 8),
+                                            Text('Edit', style: TextStyle(color: textColor)),
+                                          ],
+                                        ),
                                       ),
                                       PopupMenuItem(
                                         value: 'Delete',
-                                        child: Text('Delete', style: TextStyle(color: textColor)),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete, color: Colors.red),
+                                            SizedBox(width: 8),
+                                            Text('Delete', style: TextStyle(color: Colors.red)),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -374,11 +570,25 @@ class _FunFactModalState extends State<FunFactModal> {
   }
 
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await ImagePicker().pickImage(source: source);
-    if (pickedFile != null) {
-      setState(() {
-        _imagePath = pickedFile.path;
-      });
+    try {
+      final pickedFile = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 800,
+        maxHeight: 600,
+        imageQuality: 85,
+      );
+      
+      if (pickedFile != null) {
+        setState(() {
+          _imagePath = pickedFile.path;
+        });
+        print('Image selected: ${pickedFile.path}');
+      }
+    } catch (e) {
+      print('Error picking image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error selecting image: $e')),
+      );
     }
   }
 
@@ -396,6 +606,7 @@ class _FunFactModalState extends State<FunFactModal> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Icon selection
               Wrap(
                 alignment: WrapAlignment.center,
                 children: ['🐶', '🐱', '🐦', '🐟'].map((icon) {
@@ -426,6 +637,8 @@ class _FunFactModalState extends State<FunFactModal> {
                 }).toList(),
               ),
               const SizedBox(height: 16),
+              
+              // Title field
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
@@ -436,6 +649,8 @@ class _FunFactModalState extends State<FunFactModal> {
                 ),
               ),
               const SizedBox(height: 12),
+              
+              // Description field
               TextField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
@@ -444,18 +659,40 @@ class _FunFactModalState extends State<FunFactModal> {
                   focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: widget.highlightColor)),
                   border: OutlineInputBorder(borderSide: BorderSide(color: widget.highlightColor)),
                 ),
+                maxLines: 3,
               ),
               const SizedBox(height: 12),
+              
+              // Image display and selection
               if (_imagePath != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.file(
-                    File(_imagePath!),
-                    width: 100,
-                    height: 100,
-                    fit: BoxFit.cover,
-                  ),
+                  child: _imagePath!.startsWith('http') || _imagePath!.startsWith('uploads/')
+                      ? Image.network(
+                          _imagePath!.startsWith('http') 
+                              ? _imagePath! 
+                              : 'http://10.0.2.2/project1msyamar/$_imagePath',
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 100,
+                              height: 100,
+                              color: Colors.grey[300],
+                              child: Icon(Icons.error),
+                            );
+                          },
+                        )
+                      : Image.file(
+                          File(_imagePath!),
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                        ),
                 ),
+              
+              // Image selection buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -471,7 +708,10 @@ class _FunFactModalState extends State<FunFactModal> {
                   ),
                 ],
               ),
+              
               const SizedBox(height: 16),
+              
+              // Save button
               ElevatedButton(
                 onPressed: () async {
                   if (_selectedIcon.isEmpty) {
@@ -494,6 +734,7 @@ class _FunFactModalState extends State<FunFactModal> {
                   }
 
                   final fact = FunFact(
+                    id: widget.fact?.id ?? 0,
                     icon: _selectedIcon,
                     title: _titleController.text.trim(),
                     description: _descriptionController.text.trim(),
@@ -505,7 +746,10 @@ class _FunFactModalState extends State<FunFactModal> {
                   backgroundColor: widget.buttonColor,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Save'),
+                child: Text(
+                  widget.fact == null ? 'Save' : 'Update',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),

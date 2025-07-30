@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fyp/profile.dart';
+import 'package:fyp/profile_management.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login.dart';
 import 'dart:convert';
@@ -741,6 +742,28 @@ int _getUniqueCategories() {
   return _notes.map((note) => note.category).toSet().length;
 }
 
+void _showBottomSheetMenu() {
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+    builder: (BuildContext context) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
+          color: lightPastelBrown,
+        ),
+        child: Wrap(
+          children: [
+            _buildMenuItem(Icons.person, "Profile Settings", () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProfileManagementPage()))),
+            _buildMenuItem(Icons.pets, "Manage Pets", () => Navigator.push(context, MaterialPageRoute(builder: (_) => PetPage()))),
+            _buildMenuItem(Icons.logout, "Logout", () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginPage()))),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 void _showFilterOptions() {
   showModalBottomSheet(
     context: context,
@@ -839,25 +862,6 @@ void _applySorting(String sortType) {
   });
 }
 
-void _showBottomSheetMenu() {
-  showModalBottomSheet(
-    context: context,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-    builder: (BuildContext context) {
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-          color: lightPastelBrown,
-        ),
-        child: Wrap(
-          children: [
-            _buildMenuItem(Icons.logout, "Logout", () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => LoginPage()))),
-          ],
-        ),
-      );
-    },
-  );
-}
 
 Widget _buildMenuItem(IconData icon, String label, VoidCallback onTap) {
   return ListTile(
