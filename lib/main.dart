@@ -16,7 +16,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        // ChangeNotifierProvider(create: (_) => PetProvider()), // Uncomment if you have PetProvider
+        ChangeNotifierProvider(create: (_) => PetProvider()), // Uncomment if you have PetProvider
       ],
       child: MyApp(isDatabaseConnected: isDatabaseConnected),
     ),
@@ -47,7 +47,18 @@ class _DatabaseErrorPageState extends State<DatabaseErrorPage> {
 
   Future<void> _retryConnection() async {
     setState(() => _isLoading = true);
-    // bool isConnected = await DatabaseHelper.checkConnection();
+    bool isConnected = await DatabaseHelper.checkConnection();
+    if (isConnected) {
+      // If connection is successful, navigate to WelcomePage
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => WelcomePage()),
+      );
+    } else {
+      // If still not connected, show an error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to connect to the database. Please try again.')),
+      );
+    }
     setState(() => _isLoading = false);
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => WelcomePage()),

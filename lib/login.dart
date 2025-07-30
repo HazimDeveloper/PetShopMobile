@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'signup.dart';
 import 'homepage.dart';
 import 'adminlogin.dart';
@@ -14,8 +15,20 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isLoading = false;
 
   void _login() async {
+    if (_usernameController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please enter both username and password')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final response = await http.post(
         Uri.parse('http://10.0.2.2/project1msyamar/login.php'),
@@ -23,26 +36,43 @@ class _LoginPageState extends State<LoginPage> {
           'Content-Type': 'application/json; charset=UTF-8',
         },
         body: jsonEncode(<String, String>{
-          'username': _usernameController.text,
-          'password': _passwordController.text,
+          'username': _usernameController.text.trim(),
+          'password': _passwordController.text.trim(),
         }),
-      );
+      ).timeout(Duration(seconds: 10));
 
-      if (!mounted) return; // Ensure the widget is still in the tree
+      if (!mounted) return;
+
+      print('Login response status: ${response.statusCode}');
+      print('Login response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
-        print('responseData: ${response.body}');
+        
         if (responseData['status'] == 'success') {
+          // Save user data to SharedPreferences
+          final prefs = await SharedPreferences.getInstance();
+          
+          // Save user_id as string for consistency
+          await prefs.setString('user_id', responseData['data']['user_id'].toString());
+          await prefs.setString('username', responseData['data']['username']);
+          await prefs.setString('fullname', responseData['data']['fullname']);
+          await prefs.setString('email', responseData['data']['email']);
+          await prefs.setBool('isLoggedIn', true);
+
+          print('✅ User data saved to SharedPreferences');
+          print('User ID: ${responseData['data']['user_id']}');
+
+          // Navigate to home page
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (context) => HomePage(username: _usernameController.text),
+              builder: (context) => HomePage(username: responseData['data']['username']),
             ),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Invalid username or password')),
+            SnackBar(content: Text(responseData['message'] ?? 'Login failed')),
           );
         }
       } else {
@@ -52,9 +82,16 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (!mounted) return;
+      print('Login error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('An error occurred')),
+        SnackBar(content: Text('Connection error. Please check your internet connection.')),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -132,9 +169,7 @@ class _LoginPageState extends State<LoginPage> {
                           obscureText: _obscurePassword,
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
+                              _obscurePassword ? Icons.visibility : Icons.visibility_off,
                               color: Colors.grey,
                             ),
                             onPressed: () {
@@ -197,22 +232,35 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildLoginButton() {
-    return ElevatedButton(
-      onPressed: _login,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Color(0xFFB89A82),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+    return Container(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _login,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Color(0xFFB89A82),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 10,
+          padding: EdgeInsets.symmetric(vertical: 15),
         ),
-        elevation: 10,
-      ),
-      child: Text(
-        "Log In",
-        style: TextStyle(
-          fontSize: 18,
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
+        child: _isLoading
+            ? SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Text(
+                "Log In",
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
     );
   }
