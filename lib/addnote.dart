@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'api_service.dart';
+// ADD THIS IMPORT FOR NOTIFICATIONS:
+import 'notification_helper.dart';
 
 class AddNotePage extends StatefulWidget {
   final DateTime? initialDate;
@@ -31,6 +33,7 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
   final List<String> _selectedPets = [];
   String _selectedPriority = 'medium';
   bool _isLoading = false;
+  bool _enableNotification = true; // NEW: Toggle for notifications
 
   late AnimationController _animationController;
   late Animation<double> _slideAnimation;
@@ -161,6 +164,7 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
     }
   }
 
+  // UPDATED: Modified to include notification scheduling
   Future<void> _saveNote() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -184,14 +188,96 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
       );
 
       if (result['status'] == 'success') {
+        // NEW: Schedule notification if enabled and note was saved successfully
+        bool notificationScheduled = false;
+        String notificationMessage = "Note saved successfully! 🎉";
+
+        if (_enableNotification && result['data'] != null) {
+          // Get note ID from response
+          int? noteId;
+          if (result['data']['note_id'] != null) {
+            noteId = result['data']['note_id'];
+          }
+
+          if (noteId != null) {
+            // Combine date and time for notification
+            final reminderDateTime = DateTime(
+              _selectedDate.year,
+              _selectedDate.month,
+              _selectedDate.day,
+              _selectedTime.hour,
+              _selectedTime.minute,
+            );
+
+            // Only schedule if the reminder is in the future
+            if (reminderDateTime.isAfter(DateTime.now())) {
+              try {
+                await NotificationHelper.scheduleNoteReminder(
+                  noteId: noteId,
+                  title: _titleController.text.trim(),
+                  content: _contentController.text.trim(),
+                  category: _selectedCategory,
+                  reminderDateTime: reminderDateTime,
+                  pets: _selectedPets,
+                );
+                
+                notificationScheduled = true;
+                notificationMessage = "Note saved and reminder set for ${_formatDateTime(reminderDateTime)}! 🔔";
+              } catch (e) {
+                print('Error scheduling notification: $e');
+                notificationMessage = "Note saved successfully, but notification scheduling failed.";
+              }
+            }
+          }
+        }
+
         if (mounted) {
-          // Show confirmation popup
+          // Show enhanced confirmation popup with notification info
           showDialog(
             context: context,
             builder: (BuildContext context) {
               return AlertDialog(
-                title: Text("Success"),
-                content: Text("Note saved successfully! 🎉"),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green[600], size: 28),
+                    SizedBox(width: 8),
+                    Text("Success"),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(notificationMessage),
+                    if (notificationScheduled) ...[
+                      SizedBox(height: 12),
+                      Container(
+                        padding: EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.notifications_active, color: Colors.blue.shade600, size: 20),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'You\'ll receive a phone notification at the scheduled time!',
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
                 actions: <Widget>[
                   TextButton(
                     onPressed: () {
@@ -225,6 +311,11 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
         });
       }
     }
+  }
+
+  // NEW: Helper method to format date time
+  String _formatDateTime(DateTime dateTime) {
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
   String _formatDate(DateTime date) {
@@ -496,6 +587,80 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
                       ),
                     ],
                   ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // NEW: Notification Settings Section
+              _buildSectionCard(
+                title: 'Notification Settings',
+                icon: Icons.notifications,
+                children: [
+                  Row(
+                    children: [
+                      Switch(
+                        value: _enableNotification,
+                        onChanged: (value) {
+                          setState(() {
+                            _enableNotification = value;
+                          });
+                        },
+                        activeColor: pastelBrown,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Enable Reminder',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: darkPastelBrown,
+                              ),
+                            ),
+                            Text(
+                              _enableNotification 
+                                ? 'You\'ll receive a phone notification at the scheduled time'
+                                : 'No notification will be sent',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_enableNotification) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blue.shade600, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Notifications work even when the app is closed. Make sure your device allows notifications from this app.',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
 
