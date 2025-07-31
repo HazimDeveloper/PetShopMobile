@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:fyp/notification_helper.dart';
+import 'package:fyp/notification_service.dart';
 import 'package:provider/provider.dart';
 import 'login.dart';
 import 'profile.dart';
 import 'database_helper.dart';
-
 // Import your PetProvider if you use it
 // import 'pet_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
+  // ADD THESE LINES:
+  await NotificationService().initialize();
+  await NotificationHelper.setupDailyReminders();
   // Check database connection before running the app
   bool isDatabaseConnected = await DatabaseHelper.checkConnection();
 
