@@ -2,70 +2,126 @@ import 'package:flutter/material.dart';
 import 'package:fyp/notification_helper.dart';
 import 'package:fyp/notification_service.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'login.dart';
+import 'homepage.dart';
 import 'profile.dart';
-import 'database_helper.dart';
-// Import your PetProvider if you use it
-// import 'pet_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // ADD THESE LINES:
-  await NotificationService().initialize();
-  await NotificationHelper.setupDailyReminders();
-  // Check database connection before running the app
-  bool isDatabaseConnected = await DatabaseHelper.checkConnection();
+  
+  // Initialize notifications
+  try {
+    await NotificationService().initialize();
+    await NotificationHelper.setupDailyReminders();
+    print('✅ Notifications initialized successfully');
+  } catch (e) {
+    print('⚠️ Notification initialization failed: $e');
+    // Continue anyway - notifications are not critical for app startup
+  }
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => PetProvider()), // Uncomment if you have PetProvider
+        ChangeNotifierProvider(create: (_) => PetProvider()),
       ],
-      child: MyApp(isDatabaseConnected: isDatabaseConnected),
+      child: MyApp(),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  final bool isDatabaseConnected;
-
-  const MyApp({Key? key, required this.isDatabaseConnected}) : super(key: key);
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: isDatabaseConnected ? WelcomePage() : DatabaseErrorPage(),
+      title: 'Pet Punctual',
+      theme: ThemeData(
+        primarySwatch: Colors.brown,
+        fontFamily: 'Roboto',
+      ),
+      home: SplashScreen(),
     );
   }
 }
 
-class DatabaseErrorPage extends StatefulWidget {
+class SplashScreen extends StatefulWidget {
   @override
-  State<DatabaseErrorPage> createState() => _DatabaseErrorPageState();
+  _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _DatabaseErrorPageState extends State<DatabaseErrorPage> {
-  bool _isLoading = false;
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
 
-  Future<void> _retryConnection() async {
-    setState(() => _isLoading = true);
-    bool isConnected = await DatabaseHelper.checkConnection();
-    if (isConnected) {
-      // If connection is successful, navigate to WelcomePage
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => WelcomePage()),
-      );
-    } else {
-      // If still not connected, show an error message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to connect to the database. Please try again.')),
-      );
+  @override
+  void initState() {
+    super.initState();
+    
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    );
+    
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
+
+    _animationController.forward();
+    
+    // Check login status after animation
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    // Wait for animation to complete
+    await Future.delayed(Duration(seconds: 3));
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      final username = prefs.getString('username') ?? '';
+
+      if (!mounted) return;
+
+      if (isLoggedIn && username.isNotEmpty) {
+        // User is logged in, go to home page
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage(username: username),
+          ),
+        );
+      } else {
+        // User is not logged in, go to welcome page
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => WelcomePage()),
+        );
+      }
+    } catch (e) {
+      print('Error checking login status: $e');
+      // On error, go to welcome page
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => WelcomePage()),
+        );
+      }
     }
-    setState(() => _isLoading = false);
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => WelcomePage()),
-      );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -80,43 +136,78 @@ class _DatabaseErrorPageState extends State<DatabaseErrorPage> {
           ),
         ),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, size: 80, color: Colors.red[700]),
-              SizedBox(height: 20),
-              Text(
-                'Database Connection Error',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.brown[700],
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Please check your internet connection\nand try again.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.brown[600],
-                ),
-              ),
-              SizedBox(height: 30),
-              _isLoading
-                  ? CircularProgressIndicator()
-                  : ElevatedButton(
-                      onPressed: _retryConnection,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Color(0xFFC4A889),
-                        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+          child: AnimatedBuilder(
+            animation: _animationController,
+            builder: (context, child) {
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // App Logo
+                      Container(
+                        width: 150,
+                        height: 150,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.9),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 20,
+                              offset: Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.pets,
+                          size: 80,
+                          color: Color(0xFFB89A82),
                         ),
                       ),
-                      child: Text('Retry Connection'),
-                    ),
-            ],
+                      SizedBox(height: 30),
+                      
+                      // App Name
+                      Text(
+                        'Pet Punctual',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF8D6E63),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      
+                      // Tagline
+                      Text(
+                        'Never Miss a Moment with Your Pet',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF8D6E63).withOpacity(0.8),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                      SizedBox(height: 50),
+                      
+                      // Loading Indicator
+                      SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFB89A82),
+                          ),
+                          strokeWidth: 3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -213,37 +304,87 @@ class _WelcomePageState extends State<WelcomePage>
                       ),
                     );
                   },
-                  child: Image.asset(
-                    'images/logopetpunctual.png',
-                    height: 250,
-                    width: 250,
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.pets,
+                      size: 100,
+                      color: buttonBrown,
+                    ),
                   ),
                 ),
-                SizedBox(height: 50),
-                Tooltip(
-                  message: 'Get Started',
-                  child: ScaleTransition(
-                    scale: _fadeAnimation,
-                    child: ElevatedButton(
-                      onPressed: _navigateToLoginPage,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: buttonBrown,
-                        padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30.0),
-                        ),
-                        elevation: 5,
-                        shadowColor: Colors.black.withOpacity(0.2),
+                SizedBox(height: 40),
+                
+                Text(
+                  'Pet Punctual',
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF8D6E63),
+                    letterSpacing: 2.0,
+                  ),
+                ),
+                SizedBox(height: 10),
+                
+                Text(
+                  'Your Pet Care Companion',
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Color(0xFF8D6E63).withOpacity(0.8),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                SizedBox(height: 60),
+                
+                ScaleTransition(
+                  scale: _fadeAnimation,
+                  child: ElevatedButton(
+                    onPressed: _navigateToLoginPage,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: buttonBrown,
+                      padding: EdgeInsets.symmetric(horizontal: 50, vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30.0),
                       ),
-                      child: Text(
-                        'Get Started',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      elevation: 8,
+                      shadowColor: Colors.black.withOpacity(0.3),
+                    ),
+                    child: Text(
+                      'Get Started',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
                       ),
                     ),
+                  ),
+                ),
+                SizedBox(height: 40),
+                
+                // Feature highlights
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    children: [
+                      _buildFeatureItem(Icons.schedule, 'Smart Reminders'),
+                      SizedBox(height: 15),
+                      _buildFeatureItem(Icons.pets, 'Pet Management'),
+                      SizedBox(height: 15),
+                      _buildFeatureItem(Icons.note_add, 'Care Notes'),
+                    ],
                   ),
                 ),
               ],
@@ -251,6 +392,28 @@ class _WelcomePageState extends State<WelcomePage>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFeatureItem(IconData icon, String text) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          icon,
+          color: Color(0xFF8D6E63).withOpacity(0.7),
+          size: 20,
+        ),
+        SizedBox(width: 10),
+        Text(
+          text,
+          style: TextStyle(
+            color: Color(0xFF8D6E63).withOpacity(0.7),
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }
