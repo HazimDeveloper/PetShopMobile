@@ -48,9 +48,10 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
     {'name': 'Vet Visit', 'icon': Icons.local_hospital, 'color': Colors.teal[400]!},
   ];
 
-  final List<String> _availablePets = [
-    'Max', 'Buddy', 'Luna', 'Charlie', 'Bella', 'Rocky', 'Daisy', 'Cooper'
-  ];
+  // UPDATED: Dynamic pet list instead of hardcoded
+  List<String> _availablePets = [];
+  bool _isPetsLoading = false;
+  String? _petsError;
 
   final List<Map<String, dynamic>> _priorities = [
     {'name': 'low', 'label': 'Low', 'color': Colors.green, 'icon': Icons.keyboard_arrow_down},
@@ -76,6 +77,9 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
     ));
 
     _animationController.forward();
+    
+    // NEW: Load user's pets when the page loads
+    _loadUserPets();
   }
 
   @override
@@ -85,6 +89,59 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
     _contentController.dispose();
     _petController.dispose();
     super.dispose();
+  }
+
+  // NEW: Method to fetch user's pets from database
+  Future<void> _loadUserPets() async {
+    setState(() {
+      _isPetsLoading = true;
+      _petsError = null;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('user_id') ?? '';
+      
+      if (userId.isEmpty) {
+        throw Exception('User ID not found. Please login again.');
+      }
+
+      final response = await http.get(
+        Uri.parse('http://10.0.2.2/project1msyamar/get_pets.php?user_id=$userId'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      print('🐾 Pets API Response: ${response.statusCode}');
+      print('🐾 Pets API Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> petsData = json.decode(response.body);
+        
+        List<String> petNames = [];
+        for (var pet in petsData) {
+          if (pet['petName'] != null && pet['petName'].toString().isNotEmpty) {
+            petNames.add(pet['petName'].toString());
+          }
+        }
+
+        setState(() {
+          _availablePets = petNames;
+          _isPetsLoading = false;
+        });
+
+        print('✅ Loaded ${petNames.length} pets: $petNames');
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Error loading pets: $e');
+      setState(() {
+        _petsError = 'Failed to load your pets: ${e.toString()}';
+        _isPetsLoading = false;
+        // Set empty list so user can still add custom pet names
+        _availablePets = [];
+      });
+    }
   }
 
   // Method to select date
@@ -720,7 +777,7 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
 
               const SizedBox(height: 20),
 
-              // Pets Section
+              // UPDATED: Pets Section with dynamic loading
               _buildSectionCard(
                 title: 'Pets',
                 icon: Icons.pets,
@@ -758,10 +815,81 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
                     ],
                   ),
 
-                  if (_availablePets.isNotEmpty) ...[
+                  // NEW: Show loading, error, or pet list
+                  if (_isPetsLoading) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(pastelBrown),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Loading your pets...',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else if (_petsError != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade50,
+                        border: Border.all(color: Colors.orange.shade200),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber, color: Colors.orange.shade600, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Unable to load your pets',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade700,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  'You can still type pet names manually above.',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade600,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loadUserPets,
+                            child: Text(
+                              'Retry',
+                              style: TextStyle(
+                                color: Colors.orange.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (_availablePets.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
-                      'Quick Add:',
+                      'Your Pets (tap to add):',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         color: darkPastelBrown,
@@ -785,16 +913,52 @@ class _AddNotePageState extends State<AddNotePage> with TickerProviderStateMixin
                                 width: isSelected ? 0 : 1,
                               ),
                             ),
-                            child: Text(
-                              pet,
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : pastelBrown,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.pets,
+                                  size: 16,
+                                  color: isSelected ? Colors.white : pastelBrown,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  pet,
+                                  style: TextStyle(
+                                    color: isSelected ? Colors.white : pastelBrown,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
                       }).toList(),
+                    ),
+                  ] else if (!_isPetsLoading && _petsError == null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        border: Border.all(color: Colors.blue.shade200),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blue.shade600, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No pets found. Add some pets in the Pet Management section or type pet names manually above.',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
 
