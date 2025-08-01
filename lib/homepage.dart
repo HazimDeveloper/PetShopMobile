@@ -295,10 +295,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   String getGreeting() {
     return 'Good Morning, ${widget.username}';
-    
   }
 
-   void _navigateToAddNote() async {
+  void _navigateToAddNote() async {
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => AddNotePage()),
@@ -313,6 +312,431 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }).toList();
   }
 
+  // NEW: Edit note functionality
+  void _editNote(Note note, int index) {
+    _showEditNoteDialog(note, index);
+  }
+
+  void _showEditNoteDialog(Note note, int index) {
+    final titleController = TextEditingController(text: note.title);
+    final categoryController = TextEditingController(text: note.category);
+    String selectedCategory = note.category;
+    DateTime selectedDate = note.date;
+    TimeOfDay selectedTime = note.time;
+    List<String> selectedPets = List.from(note.pets);
+
+    final categories = [
+      'General', 'Health', 'Feeding', 'Training', 'Grooming', 'Play', 'Vet Visit'
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.edit, color: pastelBrown),
+              SizedBox(width: 8),
+              Text('Edit Note', style: TextStyle(color: darkPastelBrown)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title field
+                  TextField(
+                    controller: titleController,
+                    decoration: InputDecoration(
+                      labelText: 'Title',
+                      prefixIcon: Icon(Icons.title, color: pastelBrown),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: pastelBrown, width: 2),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Category dropdown
+                  DropdownButtonFormField<String>(
+                    value: selectedCategory,
+                    decoration: InputDecoration(
+                      labelText: 'Category',
+                      prefixIcon: Icon(Icons.category, color: pastelBrown),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: pastelBrown, width: 2),
+                      ),
+                    ),
+                    items: categories.map((category) {
+                      return DropdownMenuItem(
+                        value: category,
+                        child: Text(category),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        selectedCategory = value!;
+                      });
+                    },
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Date and Time pickers
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final pickedDate = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime.now().subtract(Duration(days: 365)),
+                              lastDate: DateTime.now().add(Duration(days: 365)),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: pastelBrown,
+                                      onPrimary: Colors.white,
+                                      surface: Colors.white,
+                                      onSurface: darkPastelBrown,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (pickedDate != null) {
+                              setDialogState(() {
+                                selectedDate = pickedDate;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.calendar_today, color: pastelBrown, size: 20),
+                                SizedBox(width: 8),
+                                Text(_formatDate(selectedDate)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final pickedTime = await showTimePicker(
+                              context: context,
+                              initialTime: selectedTime,
+                              builder: (context, child) {
+                                return Theme(
+                                  data: Theme.of(context).copyWith(
+                                    colorScheme: ColorScheme.light(
+                                      primary: pastelBrown,
+                                      onPrimary: Colors.white,
+                                      surface: Colors.white,
+                                      onSurface: darkPastelBrown,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (pickedTime != null) {
+                              setDialogState(() {
+                                selectedTime = pickedTime;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.access_time, color: pastelBrown, size: 20),
+                                SizedBox(width: 8),
+                                Text(selectedTime.format(context)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Pets display (simplified for edit dialog)
+                  if (selectedPets.isNotEmpty) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Pets: ${selectedPets.join(', ')}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Title cannot be empty')),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                await _updateNote(note, titleController.text.trim(), selectedCategory, selectedDate, selectedTime, selectedPets);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: pastelBrown,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text('Update', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _updateNote(Note originalNote, String title, String category, DateTime date, TimeOfDay time, List<String> pets) async {
+    try {
+      // Find the original note in the list to get its ID (assuming it has an ID field)
+      // For now, we'll use a simple approach by finding the matching note
+      int noteIndex = _notes.indexWhere((n) => 
+        n.title == originalNote.title && 
+        n.date == originalNote.date && 
+        n.time == originalNote.time
+      );
+
+      if (noteIndex == -1) {
+        throw Exception('Note not found');
+      }
+
+      // Using a simple HTTP request to update the note
+      // You might need to add an ID field to your Note model to make this more robust
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('user_id') ?? '';
+
+      final response = await http.post(
+        Uri.parse('http://10.0.2.2/project1msyamar/notes.php?action=edit'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id': noteIndex + 1, // This is a workaround - you should have proper IDs
+          'title': title,
+          'category': category,
+          'date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+          'time': '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+          'pets': jsonEncode(pets),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['status'] == 'success') {
+          // Update the local note
+          setState(() {
+            _notes[noteIndex] = Note(
+              title: title,
+              category: category,
+              date: date,
+              time: time,
+              pets: pets,
+            );
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Note updated successfully! 📝'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } else {
+          throw Exception(result['message'] ?? 'Failed to update note');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error updating note: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update note: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // NEW: Delete note functionality
+  void _deleteNote(Note note, int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.red[600]),
+            SizedBox(width: 8),
+            Text('Delete Note', style: TextStyle(color: Colors.red[700])),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete this note?',
+              style: TextStyle(fontSize: 16),
+            ),
+            SizedBox(height: 12),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    note.title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    '${note.category} • ${_formatDate(note.date)}',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 12),
+            Text(
+              '⚠️ This action cannot be undone.',
+              style: TextStyle(
+                color: Colors.red[600],
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _performDeleteNote(note, index);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[600],
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performDeleteNote(Note note, int index) async {
+    try {
+      // Using a simple HTTP request to delete the note
+      final response = await http.post(
+        Uri.parse('http://10.0.2.2/project1msyamar/notes.php?action=delete'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id': index + 1, // This is a workaround - you should have proper IDs
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['status'] == 'success') {
+          // Remove from local list
+          setState(() {
+            _notes.removeAt(index);
+            _checkMilestone();
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Note deleted successfully! 🗑️'),
+              backgroundColor: Colors.orange[600],
+              behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(
+                label: 'Undo',
+                textColor: Colors.white,
+                onPressed: () {
+                  // You could implement undo functionality here
+                  setState(() {
+                    _notes.insert(index, note);
+                  });
+                },
+              ),
+            ),
+          );
+        } else {
+          throw Exception(result['message'] ?? 'Failed to delete note');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error deleting note: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete note: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget buildNoteCard(Note note, int filteredIndex) {
     final actualIndex = _notes.indexWhere((n) => 
       n.title == note.title && 
@@ -322,42 +746,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
     Color categoryColor = _getCategoryColor(note.category);
 
-    return Dismissible(
-      key: Key('${note.title}_${note.date.millisecondsSinceEpoch}_$filteredIndex'),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        alignment: Alignment.centerRight,
-        color: Colors.redAccent,
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      onDismissed: (direction) {
-        if (actualIndex != -1) {
-          final deletedNote = _notes[actualIndex];
-          safeSetState(() {
-            _notes.removeAt(actualIndex);
-            _checkMilestone();
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Note deleted'),
-              backgroundColor: Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-              action: SnackBarAction(
-                label: 'Undo',
-                textColor: Colors.white,
-                onPressed: () {
-                  safeSetState(() {
-                    _notes.insert(actualIndex, deletedNote);
-                  });
-                },
-              ),
-            ),
-          );
-        }
-      },
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
@@ -383,95 +775,123 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             },
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
                 children: [
-                  Container(
-                    width: 4,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: categoryColor,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                note.title,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: darkPastelBrown,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: categoryColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                note.category,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: categoryColor,
-                                ),
-                              ),
-                            ),
-                          ],
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: categoryColor,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                            const SizedBox(width: 4),
-                            Text(
-                              "${_formatDate(note.date)} • ${note.time.format(context)}",
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    note.title,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: darkPastelBrown,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: categoryColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    note.category,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: categoryColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                        if (note.pets.isNotEmpty) ...[ 
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.pets, size: 16, color: Colors.grey[600]),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  note.pets.join(', '),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "${_formatDate(note.date)} • ${note.time.format(context)}",
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.grey[600],
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
+                              ],
+                            ),
+                            if (note.pets.isNotEmpty) ...[ 
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(Icons.pets, size: 16, color: Colors.grey[600]),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      note.pets.join(', '),
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
+                          ],
+                        ),
+                      ),
+                      // NEW: Edit and Delete buttons
+                      Column(
+                        children: [
+                          InkWell(
+                            onTap: () => _editNote(note, actualIndex),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.edit,
+                                size: 20,
+                                color: Colors.blue[600],
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          InkWell(
+                            onTap: () => _deleteNote(note, actualIndex),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.delete,
+                                size: 20,
+                                color: Colors.red[600],
+                              ),
+                            ),
                           ),
                         ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.grey[400],
+                      ),
+                    ],
                   ),
                 ],
               ),
