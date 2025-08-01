@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'detailpet.dart';
 
 // PET MODEL
 class Pet {
@@ -351,6 +352,7 @@ class _PetPageState extends State<PetPage> {
                     itemBuilder: (context, index) {
                       return PetCard(
                         pet: petProvider.pets[index],
+                        index: index, // ADD THIS LINE
                         onEdit: () {
                           Navigator.push(
                             context,
@@ -397,56 +399,206 @@ class PetCard extends StatelessWidget {
   final Pet pet;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
+  final int index;
 
-  const PetCard({super.key, 
+  const PetCard({
+    super.key, 
     required this.pet,
     required this.onEdit,
     required this.onRemove,
+    required this.index,
   });
+
+  void _showPetDetails(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PetDetailPage(
+          pet: pet,
+          isNewlyCreated: false,
+        ),
+      ),
+    );
+  }
+
+  void _showOptionsMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.visibility, color: Colors.blue[600]),
+              title: Text('View Details'),
+              onTap: () {
+                Navigator.pop(context);
+                _showPetDetails(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.edit, color: Colors.orange[600]),
+              title: Text('Edit Pet'),
+              onTap: () {
+                Navigator.pop(context);
+                onEdit();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.delete, color: Colors.red[600]),
+              title: Text('Delete Pet'),
+              onTap: () {
+                Navigator.pop(context);
+                onRemove();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: Colors.brown[100],
-      elevation: 3,
+      color: Colors.brown[50],
+      elevation: 5,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      margin: EdgeInsets.symmetric(vertical: 6),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(50),
-              child: pet.imagePath != null
-                  ? Image.file(
-                      File(pet.imagePath!),
-                      width: 70,
-                      height: 70,
-                      fit: BoxFit.cover,
-                    )
-                  : Container(
-                      width: 70,
-                      height: 70,
-                      color: Colors.brown[300],
-                      child: Icon(Icons.pets, color: Colors.white, size: 40),
+      margin: EdgeInsets.symmetric(vertical: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: () => _showPetDetails(context),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Pet Image
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: Offset(0, 2),
                     ),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: pet.imagePath != null && pet.imagePath!.isNotEmpty
+                      ? Image.file(
+                          File(pet.imagePath!),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: Colors.brown[300],
+                              child: Icon(Icons.pets, color: Colors.white, size: 35),
+                            );
+                          },
+                        )
+                      : Container(
+                          color: Colors.brown[300],
+                          child: Icon(Icons.pets, color: Colors.white, size: 35),
+                        ),
+                ),
+              ),
+              
+              SizedBox(width: 16),
+              
+              // Pet Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      pet.petNameController.text,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.brown[800],
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Breed: ${pet.breedController.text.isEmpty ? "Not specified" : pet.breedController.text}',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.brown[600],
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          pet.gender == 'Male' ? Icons.male : Icons.female,
+                          size: 16,
+                          color: pet.gender == 'Male' ? Colors.blue[600] : Colors.pink[600],
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          pet.gender,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.brown[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(width: 12),
+                        Icon(
+                          pet.petType == 'Indoor' ? Icons.home : Icons.landscape,
+                          size: 16,
+                          color: Colors.green[600],
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          pet.petType,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.brown[600],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Actions
+              Column(
                 children: [
-                  Text(
-                    pet.petNameController.text,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  IconButton(
+                    icon: Icon(Icons.more_vert, color: Colors.brown[600]),
+                    onPressed: () => _showOptionsMenu(context),
+                    tooltip: 'More options',
                   ),
-                  Text('Breed: ${pet.breedController.text}'),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.blue[200]!),
+                    ),
+                    child: Text(
+                      'Tap to view',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.blue[700],
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ],
               ),
-            ),
-            IconButton(icon: Icon(Icons.edit), onPressed: onEdit, color: Colors.brown[700]),
-            IconButton(icon: Icon(Icons.delete), onPressed: onRemove, color: Colors.redAccent),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -468,6 +620,7 @@ class _AddEditPetPageState extends State<AddEditPetPage> with SingleTickerProvid
   late Pet _editingPet;
   File? _imageFile;
   final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false; // ADD THIS LINE
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -526,18 +679,131 @@ class _AddEditPetPageState extends State<AddEditPetPage> with SingleTickerProvid
 
   void _savePet() async {
     if (_formKey.currentState!.validate()) {
-      final petProvider = Provider.of<PetProvider>(context, listen: false);
+      setState(() {
+        _isLoading = true;
+      });
 
-      if (widget.index != null) {
-        petProvider.updatePet(widget.index!, _editingPet);
-        await savePetToDatabase(_editingPet, isEdit: true);
-      } else {
-        petProvider.addPet(_editingPet);
-        await savePetToDatabase(_editingPet);
+      try {
+        final petProvider = Provider.of<PetProvider>(context, listen: false);
+        bool isEdit = widget.index != null;
+
+        if (isEdit) {
+          petProvider.updatePet(widget.index!, _editingPet);
+          await savePetToDatabase(_editingPet, isEdit: true);
+        } else {
+          petProvider.addPet(_editingPet);
+          await savePetToDatabase(_editingPet);
+        }
+
+        setState(() {
+          _isLoading = false;
+        });
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(isEdit ? 'Pet updated successfully! 🎉' : 'Pet added successfully! 🎉'),
+                ],
+              ),
+              backgroundColor: Colors.green[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          // Wait a moment for the snackbar to show, then navigate
+          await Future.delayed(Duration(milliseconds: 500));
+
+          // Navigate to pet details page
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PetDetailPage(
+                  pet: _editingPet,
+                  isNewlyCreated: true,
+                ),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.error, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Error saving pet: ${e.toString()}'),
+                ],
+              ),
+              backgroundColor: Colors.red[600],
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        }
       }
-
-      Navigator.pop(context);
     }
+  }
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _savePet,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _isLoading ? Colors.grey[400] : Colors.brown.shade300,
+          padding: EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: _isLoading ? 0 : 8,
+        ),
+        child: _isLoading
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    widget.pet == null ? 'Adding Pet...' : 'Updating Pet...',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                widget.pet == null ? 'Add Pet' : 'Update Pet',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+      ),
+    );
   }
 
   @override
@@ -631,13 +897,7 @@ class _AddEditPetPageState extends State<AddEditPetPage> with SingleTickerProvid
                 ],
               ),
               SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _savePet,
-                  child: Text('Save Pet'),
-                ),
-              ),
+              _buildSaveButton(),
             ],
           ),
         ),
